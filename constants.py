@@ -1,0 +1,11 @@
+# Constants
+TILE_SIZE = 64
+ROWS = 8
+COLS = 8
+
+# Color definitions
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+LIGHT_COLOR = (240, 217, 181)
+DARK_COLOR = (181, 136, 99)
+HIGHLIGHT_COLOR = (0, 128, 255, 76)
