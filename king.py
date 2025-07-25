@@ -1,69 +1,89 @@
-from typing import List
-from dataclasses import dataclass
+from typing import List, Tuple, Optional
 from colors import Color
 from pawn import Pawn
 from piece import Piece
-from rook import Rook
-from vector import Vector2i
+from rook import Rook  # Для проверки рокировки
+import pygame
 
 
 class King(Piece):
-    def __init__(self, parent_node, pos: Vector2i, clr: str):
-        color_prefix = "b" if clr == Color.BLACK else "w"
-        texture_path = f"assets/{color_prefix}K.png"
-        super().__init__(parent_node, pos, clr, texture_path)
-    
-    def is_valid_move(self, new_position: Vector2i, pieces: List[Piece], ignore_checks=False) -> bool:
-        if not super().is_valid_move(new_position, pieces, ignore_checks):  # ✅ фикс
+    def __init__(self, parent_surface: pygame.Surface, pos: Tuple[int, int], color: str, texture_path: Optional[str] = None):
+        """
+        Класс короля
+
+        :param parent_surface: Поверхность для отрисовки
+        :param pos: Начальная позиция (x, y)
+        :param color: Цвет фигуры ('white' или 'black')
+        :param texture_path: Путь к изображению короля
+        """
+        if texture_path is None:
+            texture_path = f"assets/{color}_king.png"  # Путь по умолчанию
+        super().__init__(parent_surface, pos, color, texture_path)
+
+    def is_valid_move(self, new_position: Tuple[int, int], pieces: List[Piece], ignore_checks: bool = False) -> bool:
+        """
+        Проверяет допустимость хода для короля с учетом:
+        - Обычного движения на 1 клетку
+        - Рокировки
+        - Не приближения к другому королю
+        - Отсутствия шаха
+        """
+        if not super().can_move_to(new_position, pieces):
             return False
 
-        dx = abs(new_position.x - self.position.x)
-        dy = abs(new_position.y - self.position.y)
+        dx = abs(new_position[0] - self.position[0])
+        dy = abs(new_position[1] - self.position[1])
 
-        # === CASTLING ===
+        # === РОКИРОВКА ===
         if dx == 2 and dy == 0 and not ignore_checks and self.move_count == 0:
-            if self._is_under_attack(self.position, pieces):
+            if self.is_under_attack(self.position, pieces):
                 return False
 
-            direction = 1 if new_position.x > self.position.x else -1
+            direction = 1 if new_position[0] > self.position[0] else -1
             rook_x = 7 if direction == 1 else 0
-            rook_pos = Vector2i(rook_x, self.position.y)
+            rook_pos = (rook_x, self.position[1])
 
+            # Поиск ладьи для рокировки
+            rook = None
             for piece in pieces:
-                if (piece.position == rook_pos and 
-                    isinstance(piece, Rook) and 
-                    piece.color == self.color and 
-                    piece.move_count == 0):
-                    
-                    # Check if path is clear and not under attack
-                    step = Vector2i(direction, 0)
-                    current = self.position + step
-                    while current != new_position + step:
-                        for other in pieces:
-                            if other.position == current:
-                                return False
-                        if self._is_under_attack(current, pieces):
-                            return False
-                        current += step
-                    return True
-            return False
+                if (isinstance(piece, Rook) and piece.position == rook_pos
+                        and piece.color == self.color and piece.move_count == 0):
+                    rook = piece
+                    break
 
-        # === Normal king move (1 square) ===
+            if not rook:
+                return False
+
+            # Проверка пути на пустоту и отсутствие атаки
+            step = (direction, 0)
+            current = (self.position[0] + step[0], self.position[1] + step[1])
+            while current != (new_position[0] + step[0], new_position[1] + step[1]):
+                # Проверка на занятость клетки
+                for piece in pieces:
+                    if piece.position == current:
+                        return False
+                # Проверка на атаку клетки
+                if self.is_under_attack(current, pieces):
+                    return False
+                current = (current[0] + step[0], current[1] + step[1])
+            return True
+
+        # === Обычный ход короля (1 клетка в любом направлении) ===
         if dx > 1 or dy > 1:
             return False
 
-        # Don't allow moving adjacent to enemy king
+        # Нельзя приближаться к вражескому королю
         for piece in pieces:
             if isinstance(piece, King) and piece.color != self.color:
                 enemy_pos = piece.position
-                if (abs(enemy_pos.x - new_position.x) <= 1 and 
-                    abs(enemy_pos.y - new_position.y) <= 1):
+                if (abs(enemy_pos[0] - new_position[0]) <= 1 and
+                        abs(enemy_pos[1] - new_position[1]) <= 1):
                     return False
 
         if ignore_checks:
             return True
 
-        # Check if move would put king in check
+        # Проверка конечной позиции на шах
         adjusted_pieces = []
         for piece in pieces:
             if piece.position != new_position:
@@ -78,27 +98,30 @@ class King(Piece):
 
         return True
 
-    def _is_under_attack(self, pos: Vector2i, pieces: List[Piece]) -> bool:
+    def is_under_attack(self, pos: Tuple[int, int], pieces: List[Piece]) -> bool:
+        """Проверяет, находится ли позиция под атакой"""
         for piece in pieces:
             if piece.color != self.color:
+                # Особый случай для пешек (атакуют по диагонали)
                 if isinstance(piece, Pawn):
-                    if piece.attacks(pos, pieces):
+                    dir = -1 if piece.color == Color.WHITE else 1
+                    if (pos == (piece.position[0] + 1, piece.position[1] + dir) or
+                            pos == (piece.position[0] - 1, piece.position[1] + dir)):
                         return True
-                else:
-                    if piece.is_valid_move(pos, pieces, True):
-                        return True
+                elif piece.is_valid_move(pos, pieces, True):
+                    return True
         return False
 
-
-    def do_castling_move(self, new_pos: Vector2i, pieces: List[Piece]):
-        row = self.position.y
-        if new_pos.x == 6:  # Kingside castling
+    def do_castling_move(self, new_pos: Tuple[int, int], pieces: List[Piece]):
+        """Выполняет рокировку, перемещая соответствующую ладью"""
+        row = self.position[1]
+        if new_pos[0] == 6:  # Короткая рокировка
             for piece in pieces:
-                if isinstance(piece, Rook) and piece.position == Vector2i(7, row):
-                    piece.move_to(Vector2i(5, row))
+                if isinstance(piece, Rook) and piece.position == (7, row):
+                    piece.move_to((5, row))
                     break
-        elif new_pos.x == 2:  # Queenside castling
+        elif new_pos[0] == 2:  # Длинная рокировка
             for piece in pieces:
-                if isinstance(piece, Rook) and piece.position == Vector2i(0, row):
-                    piece.move_to(Vector2i(3, row))
+                if isinstance(piece, Rook) and piece.position == (0, row):
+                    piece.move_to((3, row))
                     break

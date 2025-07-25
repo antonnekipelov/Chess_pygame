@@ -1,40 +1,63 @@
-from colors import Color
+from typing import List, Tuple, Optional
+import pygame
 from piece import Piece
-from vector import Vector2i
 
 
 class Bishop(Piece):
-    def __init__(self, parent_node, pos: Vector2i, clr: str):
-        color_prefix = "b" if clr == Color.BLACK else "w"
-        texture_path = f"assets/{color_prefix}B.png"
-        super().__init__(parent_node, pos, clr, texture_path)
-    
-    def is_valid_move(self, target: Vector2i, pieces: list, ignore_checks=False) -> bool:
+    def __init__(self, parent_surface: pygame.Surface, pos: Tuple[int, int], color: str, texture_path: Optional[str] = None):
+        """
+        Класс слона (bishop)
+
+        :param parent_surface: Поверхность для отрисовки
+        :param pos: Начальная позиция (x, y)
+        :param color: Цвет фигуры ('white' или 'black')
+        :param texture_path: Путь к изображению слона
+        """
+        if texture_path is None:
+            texture_path = f"assets/{color}_bishop.png"  # Путь по умолчанию
+        super().__init__(parent_surface, pos, color, texture_path)
+
+    def is_valid_move(self, new_position: Tuple[int, int], pieces: List[Piece], ignore_checks: bool = False) -> bool:
+        """
+        Проверяет допустимость хода для слона:
+        - Движение только по диагоналям
+        - Не может перепрыгивать через фигуры
+        - Может брать фигуры противника
+        """
         # Сначала базовая проверка (нельзя бить свои фигуры)
-        if not super().is_valid_move(target, pieces, ignore_checks):
+        if not super().is_valid_move(new_position, pieces):
             return False
 
-        dx = target.x - self.position.x
-        dy = target.y - self.position.y
+        dx = new_position[0] - self.position[0]
+        dy = new_position[1] - self.position[1]
 
         # Проверка на диагональное перемещение (|dx| == |dy|)
         if abs(dx) != abs(dy):
             return False
 
-        step = Vector2i(1 if dx > 0 else -1, 1 if dy > 0 else -1)
-        current = self.position + step
+        step_x = 1 if dx > 0 else -1
+        step_y = 1 if dy > 0 else -1
+        current_x, current_y = self.position[0] + \
+            step_x, self.position[1] + step_y
 
-        while current != target:
-            if any(piece.position == current for piece in pieces):
-                return False  # Препятствие на пути
-            current += step
+        # Проверяем все клетки по пути
+        while (current_x != new_position[0]) and (current_y != new_position[1]):
+            for piece in pieces:
+                if piece.position == (current_x, current_y):
+                    return False  # Препятствие на пути
+            current_x += step_x
+            current_y += step_y
 
         # Проверка конечной клетки: либо пуста, либо с вражеской фигурой
         for piece in pieces:
-            if piece.position == target:
-                return piece.color != self.color  # Разрешено, если чужая
+            if piece.position == new_position:
+                return piece.color != self.color  # Разрешено, если чужая фигура
 
-        return True  # Свободна
-    
-    def is_dark_square(self)->bool:
-        return (self.position.x+self.position.y)%2!=0
+        return True  # Клетка свободна
+
+    def is_dark_square(self) -> bool:
+        """
+        Определяет, стоит ли слон на темной клетке
+        (нужно для определения однопольных/разнопольных слонов)
+        """
+        return (self.position[0] + self.position[1]) % 2 != 0
