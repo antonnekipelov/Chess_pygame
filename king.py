@@ -1,33 +1,17 @@
 from typing import List, Tuple, Optional
-from colors import Color
-from pawn import Pawn
-from piece import Piece
-from rook import Rook  # Для проверки рокировки
 import pygame
-
+from colors import Color
+from piece import Piece
+from rook import Rook
+from pawn import Pawn
 
 class King(Piece):
     def __init__(self, parent_surface: pygame.Surface, pos: Tuple[int, int], color: str, texture_path: Optional[str] = None):
-        """
-        Класс короля
-
-        :param parent_surface: Поверхность для отрисовки
-        :param pos: Начальная позиция (x, y)
-        :param color: Цвет фигуры ('white' или 'black')
-        :param texture_path: Путь к изображению короля
-        """
         if texture_path is None:
-            texture_path = f"assets/{color}_king.png"  # Путь по умолчанию
+            texture_path = f"assets/bK.png" if color == Color.BLACK else f"assets/wK.png"
         super().__init__(parent_surface, pos, color, texture_path)
 
     def is_valid_move(self, new_position: Tuple[int, int], pieces: List[Piece], ignore_checks: bool = False) -> bool:
-        """
-        Проверяет допустимость хода для короля с учетом:
-        - Обычного движения на 1 клетку
-        - Рокировки
-        - Не приближения к другому королю
-        - Отсутствия шаха
-        """
         if not super().can_move_to(new_position, pieces):
             return False
 
@@ -43,32 +27,33 @@ class King(Piece):
             rook_x = 7 if direction == 1 else 0
             rook_pos = (rook_x, self.position[1])
 
-            # Поиск ладьи для рокировки
+            # Ищем ладью для рокировки
             rook = None
             for piece in pieces:
-                if (isinstance(piece, Rook) and piece.position == rook_pos
-                        and piece.color == self.color and piece.move_count == 0):
+                if (piece.position == rook_pos and isinstance(piece, Rook) 
+                    and piece.color == self.color and piece.move_count == 0):
                     rook = piece
                     break
 
             if not rook:
                 return False
 
-            # Проверка пути на пустоту и отсутствие атаки
-            step = (direction, 0)
-            current = (self.position[0] + step[0], self.position[1] + step[1])
-            while current != (new_position[0] + step[0], new_position[1] + step[1]):
-                # Проверка на занятость клетки
+            # Проверяем путь между королем и ладьей
+            step_x = direction
+            current_x = self.position[0] + step_x
+            while current_x != rook_pos[0]:
+                # Проверяем занятость клетки
                 for piece in pieces:
-                    if piece.position == current:
+                    if piece.position == (current_x, self.position[1]):
                         return False
-                # Проверка на атаку клетки
-                if self.is_under_attack(current, pieces):
+                # Проверяем атаку на клетку
+                if self.is_under_attack((current_x, self.position[1]), pieces):
                     return False
-                current = (current[0] + step[0], current[1] + step[1])
+                current_x += step_x
+
             return True
 
-        # === Обычный ход короля (1 клетка в любом направлении) ===
+        # === Обычный ход короля ===
         if dx > 1 or dy > 1:
             return False
 
@@ -76,25 +61,18 @@ class King(Piece):
         for piece in pieces:
             if isinstance(piece, King) and piece.color != self.color:
                 enemy_pos = piece.position
-                if (abs(enemy_pos[0] - new_position[0]) <= 1 and
-                        abs(enemy_pos[1] - new_position[1]) <= 1):
+                if (abs(enemy_pos[0] - new_position[0]) <= 1 and 
+                    abs(enemy_pos[1] - new_position[1]) <= 1):
                     return False
 
         if ignore_checks:
             return True
 
         # Проверка конечной позиции на шах
-        adjusted_pieces = []
-        for piece in pieces:
-            if piece.position != new_position:
-                adjusted_pieces.append(piece)
-            elif piece.color == self.color:
+        temp_pieces = [p for p in pieces if p.position != new_position or p.color != self.color]
+        for piece in temp_pieces:
+            if piece.color != self.color and piece.is_valid_move(new_position, temp_pieces, True):
                 return False
-
-        for piece in adjusted_pieces:
-            if piece.color != self.color:
-                if piece.is_valid_move(new_position, adjusted_pieces, True):
-                    return False
 
         return True
 
@@ -105,8 +83,8 @@ class King(Piece):
                 # Особый случай для пешек (атакуют по диагонали)
                 if isinstance(piece, Pawn):
                     dir = -1 if piece.color == Color.WHITE else 1
-                    if (pos == (piece.position[0] + 1, piece.position[1] + dir) or
-                            pos == (piece.position[0] - 1, piece.position[1] + dir)):
+                    if pos == (piece.position[0] + 1, piece.position[1] + dir) or\
+                       pos == (piece.position[0] - 1, piece.position[1] + dir):
                         return True
                 elif piece.is_valid_move(pos, pieces, True):
                     return True

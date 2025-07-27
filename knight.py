@@ -1,5 +1,6 @@
 from typing import List, Tuple, Optional
 import pygame
+from colors import Color
 from piece import Piece
 
 
@@ -14,7 +15,7 @@ class Knight(Piece):
         :param texture_path: Путь к изображению коня
         """
         if texture_path is None:
-            texture_path = f"assets/{color}_knight.png"  # Путь по умолчанию
+            texture_path = f"assets/bN.png" if color == Color.BLACK else f"assets/wN.png"
         super().__init__(parent_surface, pos, color, texture_path)
 
     def is_valid_move(self, new_position: Tuple[int, int], pieces: List[Piece], ignore_checks: bool = False) -> bool:

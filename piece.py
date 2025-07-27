@@ -94,3 +94,7 @@ class Piece:
             if p.position == to_position and p.color != self.color:
                 return True
         return False
+
+    def copy(self) -> 'Piece':
+        """Создает копию фигуры"""
+        return type(self)(self.parent_surface, self.position, self.color, getattr(self, 'texture_path', None))

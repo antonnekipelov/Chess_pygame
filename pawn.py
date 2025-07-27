@@ -5,18 +5,13 @@ import pygame
 
 
 class Pawn(Piece):
-    def __init__(self, parent_surface: pygame.Surface, pos: Tuple[int, int], color: str, texture_path: Optional[str] = None):
-        """
-        Класс пешки
-
-        :param parent_surface: Поверхность для отрисовки
-        :param pos: Начальная позиция (x, y)
-        :param color: Цвет фигуры ('white' или 'black')
-        :param texture_path: Путь к изображению пешки
-        """
+    def __init__(self, parent_surface: pygame.Surface, pos: Tuple[int, int], color: Color, texture_path: Optional[str] = None):
+        # Присваиваем путь к текстуре до вызова super, основываясь на color (а не self.color!)
         if texture_path is None:
-            texture_path = f"assets/{color}_pawn.png"  # Путь по умолчанию
+            texture_path = f"assets/bp.png" if color == Color.BLACK else f"assets/wp.png"
+
         super().__init__(parent_surface, pos, color, texture_path)
+
 
     def is_valid_move(self, new_position: Tuple[int, int], pieces: List[Piece], ignore_checks: bool = False) -> bool:
         """
