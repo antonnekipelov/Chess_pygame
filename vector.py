@@ -6,9 +6,12 @@ class Vector2i:
     def copy(self):
         return Vector2i(self.x, self.y)
 
+    
     def __eq__(self, other):
-        return isinstance(other, Vector2i) and self.x == other.x and self.y == other.y
-
+        if isinstance(other, Vector2i):
+            return self.x == other.x and self.y == other.y
+        return False
+    
     def __repr__(self):
         return f"Vector2i({self.x}, {self.y})"
 

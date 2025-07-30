@@ -5,7 +5,7 @@ from piece import Piece
 
 
 class Rook(Piece):
-    def __init__(self, parent_surface: pygame.Surface, pos: Tuple[int, int], color: str, texture_path: Optional[str] = None):
+    def __init__(self, parent_surface: pygame.Surface, pos: Tuple[int, int], color: Color, texture_path: Optional[str] = None):
         """
         Класс ладьи (rook)
 
@@ -17,7 +17,11 @@ class Rook(Piece):
         if texture_path is None:
             texture_path = f"assets/bR.png" if color == Color.BLACK else f"assets/wR.png"
         super().__init__(parent_surface, pos, color, texture_path)
+        self.has_moved = False
 
+    def move_to(self, new_position: Tuple[int, int]):
+        super().move_to(new_position)
+        self.has_moved = True  
     def is_valid_move(self, new_position: Tuple[int, int], pieces: List[Piece], ignore_checks: bool = False) -> bool:
         """
         Проверяет допустимость хода для ладьи:

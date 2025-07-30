@@ -5,7 +5,7 @@ from piece import Piece
 
 
 class Bishop(Piece):
-    def __init__(self, parent_surface: pygame.Surface, pos: Tuple[int, int], color: str, texture_path: Optional[str] = None):
+    def __init__(self, parent_surface: pygame.Surface, pos: Tuple[int, int], color: Color, texture_path: Optional[str] = None):
         """
         Класс слона (bishop)
 
