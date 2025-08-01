@@ -19,6 +19,8 @@ class Pawn(Piece):
             texture_path = f"assets/bP.png" if color == Color.BLACK else f"assets/wP.png"
         super().__init__(parent_surface, pos, color, texture_path)
         self.en_passant_vulnerable = False  # Флаг "взятия на проходе"
+        self.captured_piece = None
+        self.prev_position = pos  # Добавляем запись предыдущей позиции
 
     def get_symbol(self) -> str:
         return "P"
@@ -73,7 +75,7 @@ class Pawn(Piece):
                     # Удаляем пешку, которая подверглась взятию на проходе
                     if last_pawn in self.parent_board.pieces:
                         self.parent_board.pieces.remove(last_pawn)
-        
+        self.prev_position = self.position
         super().move_to(new_position)
         self.en_passant_vulnerable = False  # Сбрасываем флаг после хода
 

@@ -1,14 +1,14 @@
 import pygame
-from typing import List, Tuple, Optional
+from typing import Tuple
 from colors import Color
 from constants import *
 from pawn import Pawn
-from piece import Piece
 from rook import Rook
 from knight import Knight
 from bishop import Bishop
 from queen import Queen
 from king import King
+from vector import Vector2i
 
 class Board:
     def __init__(self):
@@ -25,17 +25,17 @@ class Board:
         self.halfmove_clock = 0
         self.is_game_over = False
         self.move_list = []
-        
-        # Для меню превращения
-        self.show_promotion_menu = False
-        self.promotion_options = []
-        self.promotion_rects = []
+        self.promotion_options = []  # Для хранения вариантов превращения
 
         self.selection_rect = pygame.Surface((TILE_SIZE, TILE_SIZE), pygame.SRCALPHA)
         self.selection_rect.fill((0, 128, 255, 80))
 
         self.font = pygame.font.SysFont('Arial', 16)
         self.turn_label = self.create_label("Ход: белые", (COLS * TILE_SIZE + 20, 20))
+
+        self.move_history_rect = pygame.Rect(COLS * TILE_SIZE + 10, 50, 280, ROWS * TILE_SIZE - 60)
+        self.move_history_font = pygame.font.SysFont('Arial', 14)
+        self.move_history_surface = pygame.Surface((280, ROWS * TILE_SIZE - 60))
 
         self.create_board()
         self.add_pieces()
@@ -101,11 +101,14 @@ class Board:
             self.screen.blit(self.selection_rect, (x, y))
 
         # Рисуем меню превращения
-        if self.show_promotion_menu and self.promotion_pawn:
+        if self.promotion_pawn:
             self.draw_promotion_menu()
 
         # Рисуем метку текущего хода
         self.screen.blit(self.turn_label[0], self.turn_label[1])
+
+        # Рисуем историю ходов
+        self.draw_move_history()
         
         pygame.display.flip()
 
@@ -113,66 +116,112 @@ class Board:
         if not self.promotion_pawn:
             return
             
-        x = self.promotion_pawn.position[0] * TILE_SIZE
-        y = self.promotion_pawn.position[1] * TILE_SIZE
-        color = self.promotion_pawn.color
+        # Полупрозрачный фон
+        overlay = pygame.Surface((COLS * TILE_SIZE, ROWS * TILE_SIZE), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 180))
+        self.screen.blit(overlay, (0, 0))
         
-        # Корректируем позицию меню, чтобы оно не выходило за границы доски
-        if y < 2 * TILE_SIZE:
-            menu_y = 0
-        else:
-            menu_y = y - 4 * TILE_SIZE  # Меню из 4 вариантов
-            
-        # Создаем поверхность для меню
-        menu_surface = pygame.Surface((TILE_SIZE, 4 * TILE_SIZE), pygame.SRCALPHA)
-        menu_surface.fill((200, 200, 200, 200))
+        # Параметры панели выбора
+        panel_width = TILE_SIZE * 4
+        panel_height = TILE_SIZE
+        panel_x = (COLS * TILE_SIZE - panel_width) // 2  # Центр доски по X
+        panel_y = (ROWS * TILE_SIZE - panel_height) // 2  # Центр доски по Y
+        
+        # Рисуем панель
+        pygame.draw.rect(self.screen, (240, 217, 181), (panel_x, panel_y, panel_width, panel_height))
+        pygame.draw.rect(self.screen, (181, 136, 99), (panel_x, panel_y, panel_width, panel_height), 2)
         
         # Варианты превращения
-        options = [Queen, Rook, Bishop, Knight]
+        choices = [Queen, Rook, Bishop, Knight]
         self.promotion_options = []
-        self.promotion_rects = []
         
-        for i, piece_class in enumerate(options):
-            # Создаем временную фигуру для отображения
-            piece = piece_class(self.screen, (0, 0), color)
+        for i, piece_cls in enumerate(choices):
+            x = panel_x + i * TILE_SIZE
+            piece = piece_cls(self.screen, (0, 0), self.promotion_pawn.color)
             piece.parent_board = self
-            self.promotion_options.append(piece)
-            
-            # Запоминаем прямоугольники для обработки кликов
-            rect = pygame.Rect(x, menu_y + i * TILE_SIZE, TILE_SIZE, TILE_SIZE)
-            self.promotion_rects.append(rect)
-            
-            # Рисуем фон для варианта превращения
-            option_rect = pygame.Rect(0, i * TILE_SIZE, TILE_SIZE, TILE_SIZE)
-            pygame.draw.rect(menu_surface, (220, 220, 220) if i % 2 == 0 else (180, 180, 180), option_rect)
             
             # Рисуем фигуру
-            piece.draw_on_surface(menu_surface, (0, i * TILE_SIZE))
-        
-        # Рисуем меню на экране
-        self.screen.blit(menu_surface, (x, menu_y))
+            if piece.sprite:
+                self.screen.blit(piece.sprite, (x, panel_y))
+            else:
+                # Fallback если нет спрайта
+                color = (255, 255, 255) if piece.color == Color.WHITE else (0, 0, 0)
+                pygame.draw.rect(self.screen, color, (x, panel_y, TILE_SIZE, TILE_SIZE))
+            
+            # Сохраняем прямоугольники для обработки кликов
+            self.promotion_options.append((piece, pygame.Rect(x, panel_y, TILE_SIZE, TILE_SIZE)))
+
+    def handle_promotion_choice(self, mouse_pos):
+        for piece, rect in self.promotion_options:
+            if rect.collidepoint(mouse_pos):
+                # Определяем символ фигуры для превращения
+                prom_letter = ""
+                if isinstance(piece, Queen):
+                    prom_letter = "Q"
+                elif isinstance(piece, Rook):
+                    prom_letter = "R"
+                elif isinstance(piece, Bishop):
+                    prom_letter = "B"
+                elif isinstance(piece, Knight):
+                    prom_letter = "N"
+                
+                # Получаем координаты превращения
+                files = "abcdefgh"
+                ranks = "12345678"
+                pos = self.promotion_pawn.position
+                to_file = files[pos[0]]
+                to_rank = ranks[pos[1]]
+                
+                # Формируем запись хода
+                move = ""
+                if self.promotion_pawn.captured_piece:  # Превращение с взятием
+                    # Берем исходную позицию пешки ДО хода
+                    from_file = files[self.promotion_pawn.prev_position[0]]
+                    move = f"{from_file}x{to_file}{to_rank}={prom_letter}"
+                else:  # Обычное превращение
+                    move = f"{to_file}{to_rank}={prom_letter}"
+                
+                # Добавляем ход в историю
+                if self.current_turn == Color.WHITE:
+                    move_num = len(self.move_list) + 1
+                    self.move_list.append(f"{move_num}. {move}")
+                else:
+                    if self.move_list:
+                        self.move_list[-1] += f" {move}"
+                    else:
+                        self.move_list.append(f"1... {move}")
+                
+                # Создаем новую фигуру
+                new_piece = piece.__class__(self.screen, self.promotion_pawn.position, self.promotion_pawn.color)
+                new_piece.parent_board = self
+                
+                # Заменяем пешку
+                self.pieces.remove(self.promotion_pawn)
+                self.pieces.append(new_piece)
+                
+                # Сбрасываем состояние превращения
+                self.promotion_pawn = None
+                self.promotion_options = []
+                
+                # Передаем ход
+                self.switch_turn()
+                return True
+        return False
+
 
     def handle_events(self):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 return False
 
+            # Обработка превращения пешки
+            if self.promotion_pawn:
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    self.handle_promotion_choice(pygame.mouse.get_pos())
+                continue
+
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 mouse_pos = pygame.mouse.get_pos()
-                
-                # Обработка клика в меню превращения
-                if self.show_promotion_menu and self.promotion_pawn:
-                    for i, rect in enumerate(self.promotion_rects):
-                        if rect.collidepoint(mouse_pos):
-                            self.promote_pawn(self.promotion_options[i])
-                            return True
-                    
-                    # Клик вне меню - отменяем превращение
-                    self.show_promotion_menu = False
-                    self.promotion_pawn = None
-                    return True
-                
-                # Обычная обработка клика по доске
                 cell = (mouse_pos[0] // TILE_SIZE, mouse_pos[1] // TILE_SIZE)
 
                 if self.is_game_over:
@@ -184,6 +233,7 @@ class Board:
                         is_capture = False
                         is_castling = False
                         is_en_passant = False
+                        captured_piece = None
 
                         # Взятие на проходе
                         if isinstance(self.selected_piece, Pawn):
@@ -193,6 +243,7 @@ class Board:
                                 self.last_double_step_pawn and
                                 self.last_double_step_pawn.position == (cell[0], prev_pos[1])):
                                 
+                                captured_piece = self.last_double_step_pawn
                                 self.pieces.remove(self.last_double_step_pawn)
                                 is_en_passant = True
                                 is_capture = True
@@ -200,33 +251,44 @@ class Board:
                         # Обычное взятие
                         for p in self.pieces[:]:
                             if p.position == cell and p.color != self.selected_piece.color:
-                                self.pieces.remove(p)
+                                captured_piece = p
                                 is_capture = True
                                 break
 
                         # Проверка на рокировку
                         if isinstance(self.selected_piece, King) and abs(cell[0] - prev_pos[0]) == 2:
                             is_castling = True
-                            # Выполняем рокировку сразу после перемещения короля
                             self.selected_piece.do_castling_move(cell, self.pieces)
-
-
-                        # Добавление хода в историю
-                        self.add_move_to_history(prev_pos, cell, self.selected_piece, 
-                                               is_capture, is_castling, is_en_passant)
-
-                        # Перемещение фигуры
-                        self.selected_piece.move_to(cell)
 
                         # Превращение пешки
                         if isinstance(self.selected_piece, Pawn):
                             last_rank = 0 if self.selected_piece.color == Color.WHITE else 7
                             if cell[1] == last_rank:
+                                # Сначала перемещаем пешку на конечную клетку
+                                self.selected_piece.move_to(cell)
+                                
+                                # Удаляем взятую фигуру (если было взятие)
+                                if is_capture and captured_piece in self.pieces:
+                                    self.pieces.remove(captured_piece)
+                                
+                                # Устанавливаем пешку для превращения
                                 self.promotion_pawn = self.selected_piece
-                                self.show_promotion_menu = True
+                                self.promotion_pawn.captured_piece = captured_piece if is_capture else None
                                 self.selected_piece = None
                                 self.show_selection = False
                                 return True
+
+                        # Добавляем ход в историю (если не превращение)
+                        if not (isinstance(self.selected_piece, Pawn) and cell[1] in (0, 7)):
+                            self.add_move_to_history(prev_pos, cell, self.selected_piece, 
+                                                is_capture, is_castling, is_en_passant)
+
+                        # Перемещение фигуры
+                        self.selected_piece.move_to(cell)
+
+                        # Удаляем взятые фигуры после перемещения (кроме случая превращения)
+                        if is_capture and captured_piece and captured_piece in self.pieces:
+                            self.pieces.remove(captured_piece)
 
                         # Обновление флага двойного хода пешки
                         if isinstance(self.selected_piece, Pawn) and abs(cell[1] - prev_pos[1]) == 2:
@@ -252,123 +314,90 @@ class Board:
 
         return True
 
-    def promote_pawn(self, new_piece):
-        if not self.promotion_pawn:
-            return
-            
-        # Создаем новую фигуру на месте пешки
-        promoted_piece = new_piece.__class__(
-            self.screen,
-            self.promotion_pawn.position,
-            self.promotion_pawn.color
-        )
-        promoted_piece.parent_board = self
-        
-        # Удаляем пешку и добавляем новую фигуру
-        self.pieces.remove(self.promotion_pawn)
-        self.pieces.append(promoted_piece)
-        
-        # Сбрасываем флаги превращения
-        self.promotion_pawn = None
-        self.show_promotion_menu = False
-        self.promotion_options = []
-        self.promotion_rects = []
-        
-        # Передаем ход
-        self.switch_turn()
-
     def switch_turn(self):
         self.current_turn = Color.BLACK if self.current_turn == Color.WHITE else Color.WHITE
         text = "белые" if self.current_turn == Color.WHITE else "чёрные"
         self.turn_label = self.create_label(f"Ход: {text}", (COLS * TILE_SIZE + 20, 20))
 
-
-    def is_draw_by_material(self):
-        piece_types = {}
-        kings = 0
-        knights = 0
-        bishops = []
-
-        for piece in self.pieces:
-            if isinstance(piece, King):
-                kings += 1
-            elif isinstance(piece, Knight):
-                knights += 1
-            elif isinstance(piece, Bishop):
-                bishops.append(piece)
-            else:
-                return False
-
-        if kings == 2 and knights == 0 and not bishops:
-            return True
-        elif kings == 2 and knights == 1 and not bishops:
-            return True
-        elif kings == 2 and not knights and len(bishops) == 1:
-            return True
-        elif kings == 2 and len(bishops) > 1 and not knights:
-            same_color = bishops[0].position[0] % 2 == bishops[0].position[1] % 2
-            for b in bishops[1:]:
-                if b.position[0] % 2 != b.position[1] % 2 != same_color:
-                    return False
-            return True
-
-        return False
-
-    def get_current_move_number(self) -> int:
-        return len(self.move_list) * 2 + (1 if self.current_turn == Color.WHITE else 0)
-
-    def get_chess_notation(self, from_pos: Tuple[int, int], to_pos: Tuple[int, int], 
-                         piece: Piece, is_capture: bool, 
-                         is_castling: bool = False, is_en_passant: bool = False) -> str:
+    def add_move_to_history(self, from_pos, to_pos, piece, is_capture, is_castling=False, is_en_passant=False, promotion=None):
         files = "abcdefgh"
-        ranks = "87654321"
-        from_sq = f"{files[from_pos[0]]}{ranks[from_pos[1]]}"
-        to_sq = f"{files[to_pos[0]]}{ranks[to_pos[1]]}"
-
-        if is_castling and isinstance(piece, King):
-            return "0-0" if to_pos[0] > from_pos[0] else "0-0-0"
-
-        symbol = "x" if is_capture or is_en_passant else "-"
+        ranks = "12345678"
         
-        if isinstance(piece, Pawn):
-            if is_en_passant:
-                return f"{from_sq}{symbol}{to_sq} e.p."
-            return f"{from_sq}{symbol}{to_sq}"
+        piece_letters = {
+            Knight: 'N',
+            Bishop: 'B',
+            Rook: 'R',
+            Queen: 'Q',
+            King: 'K',
+            Pawn: ''
+        }
         
-        piece_symbol = ""
-        if isinstance(piece, Queen):
-            piece_symbol = "Q"
-        elif isinstance(piece, Rook):
-            piece_symbol = "R"
-        elif isinstance(piece, Bishop):
-            piece_symbol = "B"
-        elif isinstance(piece, Knight):
-            piece_symbol = "N"
-        elif isinstance(piece, King):
-            piece_symbol = "K"
+        piece_letter = piece_letters.get(type(piece), '')
+        from_file = files[from_pos[0]]
+        from_rank = ranks[from_pos[1]]
+        to_file = files[to_pos[0]]
+        to_rank = ranks[to_pos[1]]
         
-        return f"{piece_symbol}{symbol}{to_sq}"
-
-    def add_move_to_history(self, from_pos: Tuple[int, int], to_pos: Tuple[int, int], 
-                          piece: Piece, is_capture: bool, 
-                          is_castling: bool = False, is_en_passant: bool = False):
-        move_number = self.get_current_move_number()
-        notation = self.get_chess_notation(from_pos, to_pos, piece, is_capture, is_castling, is_en_passant)
-        turn_prefix = "Белые" if self.current_turn == Color.WHITE else "Чёрные"
-        full_move = f"{move_number}. {turn_prefix}: {notation}"
-
-        if self.current_turn == Color.WHITE:
-            self.move_list.append([full_move, ""])
+        if is_castling:
+            move = "O-O" if to_pos[0] > from_pos[0] else "O-O-O"
         else:
+            move = ""
+            if isinstance(piece, Pawn):
+                # Для пешки указываем только файл при взятии
+                if is_capture:
+                    move += f"{from_file}x"
+                move += f"{to_file}{to_rank}"
+            else:
+                # Для других фигур
+                if is_capture:
+                    # Указываем только тип фигуры, знак взятия и поле
+                    move += f"{piece_letter}x{to_file}{to_rank}"
+                else:
+                    move += f"{piece_letter}{to_file}{to_rank}"
+            
+            if promotion:
+                move += f"={promotion}"
+        
+        # Всегда создаем новую запись для хода белых
+        if self.current_turn == Color.WHITE:
+            move_num = len(self.move_list) + 1
+            self.move_list.append(f"{move_num}. {move}")
+        else:
+            # Добавляем ход черных к последней записи
             if self.move_list:
-                self.move_list[-1][1] = full_move
+                self.move_list[-1] += f" {move}"
+            else:
+                # На случай если черные ходят первыми (не должно быть)
+                self.move_list.append(f"1... {move}")
 
-    def show_promotion_ui(self):
-        # TODO: Реализовать интерфейс превращения пешки
-        pass
+    def draw_move_history(self):
+        self.move_history_surface.fill((240, 240, 240))
+        pygame.draw.rect(self.move_history_surface, (200, 200, 200), (0, 0, 280, ROWS * TILE_SIZE - 60), 2)
+        
+        title = self.move_history_font.render("История ходов:", True, (0, 0, 0))
+        self.move_history_surface.blit(title, (10, 10))
+        
+        y_offset = 40
+        column_width = 120
+        
+        for move in self.move_list:
+            parts = move.split(' ')
+            if len(parts) >= 2:
+                # Номер хода + ход белых
+                white_part = f"{parts[0]} {parts[1]}"
+                white_text = self.move_history_font.render(white_part, True, (0, 0, 0))
+                self.move_history_surface.blit(white_text, (10, y_offset))
+                
+                # Ход черных (если есть)
+                if len(parts) >= 3:
+                    black_text = self.move_history_font.render(parts[2], True, (0, 0, 0))
+                    self.move_history_surface.blit(black_text, (10 + column_width, y_offset))
+            y_offset += 20
+        
+        self.screen.blit(self.move_history_surface, (COLS * TILE_SIZE + 10, 50))
 
-    def show_draw_popup(self, message: str):
-        print(message)  # В реальной реализации можно использовать pygame для отображения
+    def show_draw_popup(self, message):
+        print(message)
 
     def run(self):
         clock = pygame.time.Clock()
@@ -378,7 +407,6 @@ class Board:
             self.draw()
             clock.tick(60)
         pygame.quit()
-
 
 if __name__ == "__main__":
     game = Board()
