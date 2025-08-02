@@ -23,6 +23,10 @@ class King(Piece):
 
         # === РОКИРОВКА ===
         if not self.has_moved and abs(dx) == 2 and dy == 0:
+            # Проверяем, находится ли король под шахом
+            if self.is_under_attack(self.position, pieces):
+                return False
+                
             direction = 1 if new_position[0] > self.position[0] else -1
             rook_x = 7 if direction == 1 else 0
             rook_pos = (rook_x, self.position[1])
@@ -41,14 +45,25 @@ class King(Piece):
             step = direction
             current = self.position[0] + step
             while current != rook_pos[0]:
-                if any(p.position == (current, self.position[1]) for p in pieces):
+                # Проверяем, не атакована ли клетка и свободна ли она
+                if any(p.position == (current, self.position[1]) for p in pieces) or \
+                self.is_under_attack((current, self.position[1]), pieces):
                     return False
                 current += step
+                
+            # Проверяем, не будет ли король под шахом после рокировки
+            king_intermediate_pos = (self.position[0] + direction, self.position[1])
+            if self.is_under_attack(king_intermediate_pos, pieces):
+                return False
                 
             return True
 
         # === Обычный ход короля ===
         if dx > 1 or dy > 1:
+            return False
+
+        # Проверяем, не будет ли король под шахом после хода
+        if self.is_under_attack(new_position, pieces):
             return False
 
         # Нельзя приближаться к вражескому королю

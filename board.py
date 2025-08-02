@@ -14,7 +14,7 @@ class Board:
     def __init__(self):
         pygame.init()
         self.screen = pygame.display.set_mode((COLS * TILE_SIZE + 300, ROWS * TILE_SIZE))
-        pygame.display.set_caption("Chess")
+        pygame.display.set_caption("Шахматы")
 
         self.pieces = []
         self.current_turn = Color.WHITE
@@ -33,9 +33,16 @@ class Board:
         self.font = pygame.font.SysFont('Arial', 16)
         self.turn_label = self.create_label("Ход: белые", (COLS * TILE_SIZE + 20, 20))
 
+        # Параметры для истории ходов с полосой прокрутки
         self.move_history_rect = pygame.Rect(COLS * TILE_SIZE + 10, 50, 280, ROWS * TILE_SIZE - 60)
         self.move_history_font = pygame.font.SysFont('Arial', 14)
         self.move_history_surface = pygame.Surface((280, ROWS * TILE_SIZE - 60))
+        self.scroll_y = 0  # Текущая позиция прокрутки
+        self.scroll_bar_rect = pygame.Rect(COLS * TILE_SIZE + 280, 50, 10, ROWS * TILE_SIZE - 60)  # Полоса прокрутки
+        self.scroll_thumb_rect = pygame.Rect(COLS * TILE_SIZE + 280, 50, 10, 50)  # Бегунок прокрутки
+        self.scroll_dragging = False  # Флаг перетаскивания бегунка
+        self.scroll_start_y = 0  # Начальная позиция при перетаскивании
+        self.content_height = 0  # Общая высота содержимого
 
         self.create_board()
         self.add_pieces()
@@ -210,9 +217,48 @@ class Board:
 
 
     def handle_events(self):
+        """Обработка событий, включая прокрутку"""
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 return False
+            # Прокрутка колесом мыши
+            if event.type == pygame.MOUSEWHEEL:
+                max_scroll = max(0, self.content_height - (ROWS * TILE_SIZE - 60))
+                self.scroll_y = max(0, min(max_scroll, self.scroll_y - event.y * 20))
+                
+            # Начало перетаскивания бегунка
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                if self.scroll_thumb_rect.collidepoint(event.pos):
+                    self.scroll_dragging = True
+                    self.scroll_start_y = event.pos[1] - self.scroll_thumb_rect.y
+                    
+            # Конец перетаскивания
+            if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+                self.scroll_dragging = False
+                
+            # Перетаскивание бегунка
+            if event.type == pygame.MOUSEMOTION and self.scroll_dragging:
+                max_scroll = max(0, self.content_height - (ROWS * TILE_SIZE - 60))
+                if max_scroll > 0:
+                    new_y = event.pos[1] - self.scroll_start_y
+                    new_y = max(50, min(new_y, 50 + (ROWS * TILE_SIZE - 60) - self.scroll_thumb_rect.height))
+                    
+                    scroll_ratio = (new_y - 50) / ((ROWS * TILE_SIZE - 60) - self.scroll_thumb_rect.height)
+                    self.scroll_y = scroll_ratio * max_scroll
+
+            # Обработка превращения пешки
+            if self.promotion_pawn:
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    self.handle_promotion_choice(pygame.mouse.get_pos())
+                continue
+
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                # Игнорируем клики на полосе прокрутки
+                if COLS * TILE_SIZE + 280 <= event.pos[0] <= COLS * TILE_SIZE + 290:
+                    continue
+                    
+                mouse_pos = pygame.mouse.get_pos()
+                cell = (mouse_pos[0] // TILE_SIZE, mouse_pos[1] // TILE_SIZE)
 
             # Обработка превращения пешки
             if self.promotion_pawn:
@@ -371,30 +417,53 @@ class Board:
                 self.move_list.append(f"1... {move}")
 
     def draw_move_history(self):
+        """Отрисовка истории ходов с полосой прокрутки и фиксированным заголовком"""
+        # Очищаем поверхность
         self.move_history_surface.fill((240, 240, 240))
         pygame.draw.rect(self.move_history_surface, (200, 200, 200), (0, 0, 280, ROWS * TILE_SIZE - 60), 2)
         
-        title = self.move_history_font.render("История ходов:", True, (0, 0, 0))
-        self.move_history_surface.blit(title, (10, 10))
-        
-        y_offset = 40
+        # Отрисовка ходов с учетом прокрутки
+        y_offset = 40 - self.scroll_y
         column_width = 120
         
+        # Вычисляем общую высоту содержимого
+        self.content_height = 40 + len(self.move_list) * 20
+        
+        # Отрисовываем только видимые ходы
         for move in self.move_list:
             parts = move.split(' ')
             if len(parts) >= 2:
-                # Номер хода + ход белых
+                # Ход белых
                 white_part = f"{parts[0]} {parts[1]}"
                 white_text = self.move_history_font.render(white_part, True, (0, 0, 0))
-                self.move_history_surface.blit(white_text, (10, y_offset))
+                if 0 <= y_offset < ROWS * TILE_SIZE - 70:  # Проверка видимости
+                    self.move_history_surface.blit(white_text, (10, y_offset))
                 
                 # Ход черных (если есть)
                 if len(parts) >= 3:
                     black_text = self.move_history_font.render(parts[2], True, (0, 0, 0))
-                    self.move_history_surface.blit(black_text, (10 + column_width, y_offset))
+                    if 0 <= y_offset < ROWS * TILE_SIZE - 70:  # Проверка видимости
+                        self.move_history_surface.blit(black_text, (10 + column_width, y_offset))
             y_offset += 20
         
+        # Отображаем поверхность с историей ходов
         self.screen.blit(self.move_history_surface, (COLS * TILE_SIZE + 10, 50))
+        
+        # Отрисовываем заголовок НАД поверхностью с прокруткой (фиксированная позиция)
+        title = self.move_history_font.render("История ходов:", True, (0, 0, 0))
+        self.screen.blit(title, (COLS * TILE_SIZE + 20, 50))
+        
+        # Отрисовка полосы прокрутки
+        pygame.draw.rect(self.screen, (220, 220, 220), self.scroll_bar_rect)
+        
+        # Вычисление размера и позиции бегунка
+        visible_ratio = min(1.0, (ROWS * TILE_SIZE - 60) / max(1, self.content_height))
+        thumb_height = max(20, (ROWS * TILE_SIZE - 60) * visible_ratio)
+        max_scroll = max(0, self.content_height - (ROWS * TILE_SIZE - 60))
+        thumb_position = 50 + (self.scroll_y / max_scroll) * ((ROWS * TILE_SIZE - 60) - thumb_height) if max_scroll > 0 else 50
+        
+        self.scroll_thumb_rect = pygame.Rect(COLS * TILE_SIZE + 280, thumb_position, 10, thumb_height)
+        pygame.draw.rect(self.screen, (150, 150, 150), self.scroll_thumb_rect)
 
     def show_draw_popup(self, message):
         print(message)
