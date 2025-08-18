@@ -15,7 +15,7 @@ class Board:
     def __init__(self):
         pygame.init()
         self.screen = pygame.display.set_mode(
-            (COLS * TILE_SIZE + 300, ROWS * TILE_SIZE))
+            (COLS * TILE_SIZE + 300, ROWS * TILE_SIZE+80))
         pygame.display.set_caption("Шахматы")
 
         self.pieces = []
@@ -131,8 +131,27 @@ class Board:
         # Рисуем результат игры, если игра завершена
         if self.is_game_over and hasattr(self, 'game_result'):
             self.draw_game_result()
+        else:
+           # Кнопка "Сдаться", если игра не окончена
+            button_width, button_height = 200, 40
+            button_x = COLS * TILE_SIZE + 50
+            # ставим под историей ходов, отталкиваясь от низа панели
+            button_y = self.move_history_rect.bottom + 20  
+            self.resign_button = pygame.Rect(button_x, button_y, button_width, button_height)
+
+            pygame.draw.rect(self.screen, (200, 100, 100), self.resign_button, border_radius=5)
+            pygame.draw.rect(self.screen, (0, 0, 0), self.resign_button, 2, border_radius=5)
+
+            button_font = pygame.font.SysFont('Arial', 22, bold=True)
+            button_text = button_font.render("Сдаться", True, (0, 0, 0))
+            self.screen.blit(
+                button_text,
+                (button_x + (button_width - button_text.get_width()) // 2,
+                 button_y + (button_height - button_text.get_height()) // 2)
+            )
 
         pygame.display.flip()
+
 
     def draw_promotion_menu(self):
         if not self.promotion_pawn:
@@ -242,40 +261,47 @@ class Board:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 return False
-                
+
             # Обработка клика по кнопке Новая игра
             if self.is_game_over and hasattr(self, 'new_game_button'):
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     if self.new_game_button.collidepoint(event.pos):
                         self.reset_game()
                         continue
-            
+
+            # Клик по кнопке "Сдаться"
+            if not self.is_game_over and hasattr(self, 'resign_button'):
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    if self.resign_button.collidepoint(event.pos):
+                        self.resign()
+                        continue
+
             # Если игра завершена, обрабатываем только закрытие окна и новую игру
             if self.is_game_over:
                 continue
-                
+
             # Прокрутка колесом мыши
             if event.type == pygame.MOUSEWHEEL:
                 max_scroll = max(0, self.content_height - (ROWS * TILE_SIZE - 60))
                 self.scroll_y = max(0, min(max_scroll, self.scroll_y - event.y * 20))
-                
+
             # Начало перетаскивания бегунка
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 if self.scroll_thumb_rect.collidepoint(event.pos):
                     self.scroll_dragging = True
                     self.scroll_start_y = event.pos[1] - self.scroll_thumb_rect.y
-                    
+
             # Конец перетаскивания
             if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
                 self.scroll_dragging = False
-                
+
             # Перетаскивание бегунка
             if event.type == pygame.MOUSEMOTION and self.scroll_dragging:
                 max_scroll = max(0, self.content_height - (ROWS * TILE_SIZE - 60))
                 if max_scroll > 0:
                     new_y = event.pos[1] - self.scroll_start_y
                     new_y = max(50, min(new_y, 50 + (ROWS * TILE_SIZE - 60) - self.scroll_thumb_rect.height))
-                    
+
                     scroll_ratio = (new_y - 50) / ((ROWS * TILE_SIZE - 60) - self.scroll_thumb_rect.height)
                     self.scroll_y = scroll_ratio * max_scroll
 
@@ -289,7 +315,7 @@ class Board:
                 # Игнорируем клики на полосе прокрутки
                 if COLS * TILE_SIZE + 280 <= event.pos[0] <= COLS * TILE_SIZE + 290:
                     continue
-                    
+
                 mouse_pos = pygame.mouse.get_pos()
                 cell = (mouse_pos[0] // TILE_SIZE, mouse_pos[1] // TILE_SIZE)
 
@@ -309,7 +335,7 @@ class Board:
                                 cell[1] - prev_pos[1] == direction and
                                 self.last_double_step_pawn and
                                 self.last_double_step_pawn.position == (cell[0], prev_pos[1])):
-                                
+
                                 captured_piece = self.last_double_step_pawn
                                 self.pieces.remove(self.last_double_step_pawn)
                                 is_en_passant = True
@@ -335,11 +361,11 @@ class Board:
                             if cell[1] == last_rank:
                                 # Сначала перемещаем пешку на конечную клетку
                                 self.selected_piece.move_to(cell)
-                                
+
                                 # Удаляем взятую фигуру (если было взятие)
                                 if is_capture and captured_piece in self.pieces:
                                     self.pieces.remove(captured_piece)
-                                
+
                                 # Устанавливаем пешку для превращения
                                 self.promotion_pawn = self.selected_piece
                                 self.promotion_pawn.captured_piece = captured_piece if is_capture else None
@@ -392,8 +418,9 @@ class Board:
         if not self.is_game_over:
             self.is_draw_by_material(self.pieces)
             self.check_fifty_move_rule()
-            
+
         return True
+
 
     def switch_turn(self):
         self.current_turn = Color.BLACK if self.current_turn == Color.WHITE else Color.WHITE
@@ -662,6 +689,19 @@ class Board:
             self.set_draw("Ничья по правилу 50 ходов")
             return True
         return False
+    
+    def resign(self):
+        """Игрок сдаётся, партия завершается поражением"""
+        if self.current_turn == Color.WHITE:
+            self.game_result = "0-1"
+            self.game_result_reason = "Белые сдались"
+        else:
+            self.game_result = "1-0"
+            self.game_result_reason = "Чёрные сдались"
+        self.is_game_over = True
+        self.draw()
+        pygame.display.flip()
+
 
     def run(self):
         clock = pygame.time.Clock()
