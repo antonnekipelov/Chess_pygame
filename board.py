@@ -320,7 +320,8 @@ class Board:
                 cell = (mouse_pos[0] // TILE_SIZE, mouse_pos[1] // TILE_SIZE)
 
                 if self.selected_piece:
-                    if self.selected_piece.is_valid_move(cell, self.pieces):
+                    legal_moves = self.get_legal_moves(self.selected_piece)
+                    if cell in legal_moves:
                         prev_pos = self.selected_piece.position
                         is_capture = False
                         is_castling = False
@@ -701,6 +702,47 @@ class Board:
         self.is_game_over = True
         self.draw()
         pygame.display.flip()
+
+    def is_in_check(self, color):
+        """Проверяет, находится ли король данного цвета под шахом"""
+        king = next((p for p in self.pieces if isinstance(p, King) and p.color == color), None)
+        if not king:
+            return False
+
+        king_pos = king.position
+        for piece in self.pieces:
+            if piece.color != color:
+                if piece.is_valid_move(king_pos, self.pieces):
+                    return True
+        return False
+
+    def get_legal_moves(self, piece):
+        """Возвращает список ходов фигуры, которые не оставляют своего короля под шахом"""
+        legal_moves = []
+        # Перебираем все клетки доски
+        for x in range(8):
+            for y in range(8):
+                move = (x, y)
+                if piece.is_valid_move(move, self.pieces):
+                    original_pos = piece.position
+                    captured_piece = next((p for p in self.pieces if p.position == move and p.color != piece.color), None)
+
+                    # временно выполняем ход
+                    piece.position = move
+                    if captured_piece:
+                        self.pieces.remove(captured_piece)
+
+                    # проверяем шах
+                    if not self.is_in_check(piece.color):
+                        legal_moves.append(move)
+
+                    # откат
+                    piece.position = original_pos
+                    if captured_piece:
+                        self.pieces.append(captured_piece)
+
+        return legal_moves
+
 
 
     def run(self):
