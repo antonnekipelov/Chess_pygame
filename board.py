@@ -136,11 +136,14 @@ class Board:
             button_width, button_height = 200, 40
             button_x = COLS * TILE_SIZE + 50
             # ставим под историей ходов, отталкиваясь от низа панели
-            button_y = self.move_history_rect.bottom + 20  
-            self.resign_button = pygame.Rect(button_x, button_y, button_width, button_height)
+            button_y = self.move_history_rect.bottom + 20
+            self.resign_button = pygame.Rect(
+                button_x, button_y, button_width, button_height)
 
-            pygame.draw.rect(self.screen, (200, 100, 100), self.resign_button, border_radius=5)
-            pygame.draw.rect(self.screen, (0, 0, 0), self.resign_button, 2, border_radius=5)
+            pygame.draw.rect(self.screen, (200, 100, 100),
+                             self.resign_button, border_radius=5)
+            pygame.draw.rect(self.screen, (0, 0, 0),
+                             self.resign_button, 2, border_radius=5)
 
             button_font = pygame.font.SysFont('Arial', 22, bold=True)
             button_text = button_font.render("Сдаться", True, (0, 0, 0))
@@ -151,7 +154,6 @@ class Board:
             )
 
         pygame.display.flip()
-
 
     def draw_promotion_menu(self):
         if not self.promotion_pawn:
@@ -257,7 +259,7 @@ class Board:
         return False
 
     def handle_events(self):
-        """Обработка событий, включая прокрутку и ничейные ситуации"""
+        """Обработка событий, включая шах, мат, пат и ничейные ситуации"""
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 return False
@@ -276,20 +278,23 @@ class Board:
                         self.resign()
                         continue
 
-            # Если игра завершена, обрабатываем только закрытие окна и новую игру
+            # Если игра завершена, больше ничего не обрабатываем
             if self.is_game_over:
                 continue
 
             # Прокрутка колесом мыши
             if event.type == pygame.MOUSEWHEEL:
-                max_scroll = max(0, self.content_height - (ROWS * TILE_SIZE - 60))
-                self.scroll_y = max(0, min(max_scroll, self.scroll_y - event.y * 20))
+                max_scroll = max(0, self.content_height -
+                                 (ROWS * TILE_SIZE - 60))
+                self.scroll_y = max(
+                    0, min(max_scroll, self.scroll_y - event.y * 20))
 
             # Начало перетаскивания бегунка
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 if self.scroll_thumb_rect.collidepoint(event.pos):
                     self.scroll_dragging = True
-                    self.scroll_start_y = event.pos[1] - self.scroll_thumb_rect.y
+                    self.scroll_start_y = event.pos[1] - \
+                        self.scroll_thumb_rect.y
 
             # Конец перетаскивания
             if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
@@ -297,12 +302,14 @@ class Board:
 
             # Перетаскивание бегунка
             if event.type == pygame.MOUSEMOTION and self.scroll_dragging:
-                max_scroll = max(0, self.content_height - (ROWS * TILE_SIZE - 60))
+                max_scroll = max(0, self.content_height -
+                                 (ROWS * TILE_SIZE - 60))
                 if max_scroll > 0:
                     new_y = event.pos[1] - self.scroll_start_y
-                    new_y = max(50, min(new_y, 50 + (ROWS * TILE_SIZE - 60) - self.scroll_thumb_rect.height))
-
-                    scroll_ratio = (new_y - 50) / ((ROWS * TILE_SIZE - 60) - self.scroll_thumb_rect.height)
+                    new_y = max(
+                        50, min(new_y, 50 + (ROWS * TILE_SIZE - 60) - self.scroll_thumb_rect.height))
+                    scroll_ratio = (
+                        new_y - 50) / ((ROWS * TILE_SIZE - 60) - self.scroll_thumb_rect.height)
                     self.scroll_y = scroll_ratio * max_scroll
 
             # Обработка превращения пешки
@@ -311,6 +318,7 @@ class Board:
                     self.handle_promotion_choice(pygame.mouse.get_pos())
                 continue
 
+            # Обработка клика по доске
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 # Игнорируем клики на полосе прокрутки
                 if COLS * TILE_SIZE + 280 <= event.pos[0] <= COLS * TILE_SIZE + 290:
@@ -320,7 +328,9 @@ class Board:
                 cell = (mouse_pos[0] // TILE_SIZE, mouse_pos[1] // TILE_SIZE)
 
                 if self.selected_piece:
+                    # Сначала получаем все легальные ходы для выбранной фигуры
                     legal_moves = self.get_legal_moves(self.selected_piece)
+
                     if cell in legal_moves:
                         prev_pos = self.selected_piece.position
                         is_capture = False
@@ -332,68 +342,64 @@ class Board:
                         # Взятие на проходе
                         if isinstance(self.selected_piece, Pawn):
                             direction = -1 if self.selected_piece.color == Color.WHITE else 1
-                            if (abs(cell[0] - prev_pos[0]) == 1 and 
+                            if (abs(cell[0] - prev_pos[0]) == 1 and
                                 cell[1] - prev_pos[1] == direction and
                                 self.last_double_step_pawn and
-                                self.last_double_step_pawn.position == (cell[0], prev_pos[1])):
+                                    self.last_double_step_pawn.position == (cell[0], prev_pos[1])):
 
                                 captured_piece = self.last_double_step_pawn
                                 self.pieces.remove(self.last_double_step_pawn)
                                 is_en_passant = True
                                 is_capture = True
-                                self.halfmove_clock = 0  # Сброс при взятии
+                                self.halfmove_clock = 0
 
                         # Обычное взятие
                         for p in self.pieces[:]:
                             if p.position == cell and p.color != self.selected_piece.color:
                                 captured_piece = p
                                 is_capture = True
-                                self.halfmove_clock = 0  # Сброс при взятии
+                                self.halfmove_clock = 0
                                 break
 
                         # Проверка на рокировку
                         if isinstance(self.selected_piece, King) and abs(cell[0] - prev_pos[0]) == 2:
                             is_castling = True
-                            self.selected_piece.do_castling_move(cell, self.pieces)
+                            self.selected_piece.do_castling_move(
+                                cell, self.pieces)
 
                         # Превращение пешки
                         if isinstance(self.selected_piece, Pawn):
                             last_rank = 0 if self.selected_piece.color == Color.WHITE else 7
                             if cell[1] == last_rank:
-                                # Сначала перемещаем пешку на конечную клетку
                                 self.selected_piece.move_to(cell)
-
-                                # Удаляем взятую фигуру (если было взятие)
                                 if is_capture and captured_piece in self.pieces:
                                     self.pieces.remove(captured_piece)
-
-                                # Устанавливаем пешку для превращения
                                 self.promotion_pawn = self.selected_piece
                                 self.promotion_pawn.captured_piece = captured_piece if is_capture else None
                                 self.selected_piece = None
                                 self.show_selection = False
-                                self.halfmove_clock = 0  # Сброс при превращении пешки
+                                self.halfmove_clock = 0
                                 return True
 
-                        # Добавляем ход в историю (если не превращение)
+                        # Добавляем ход в историю
                         if not (isinstance(self.selected_piece, Pawn) and cell[1] in (0, 7)):
-                            self.add_move_to_history(prev_pos, cell, self.selected_piece, 
-                                                is_capture, is_castling, is_en_passant)
+                            self.add_move_to_history(prev_pos, cell, self.selected_piece,
+                                                     is_capture, is_castling, is_en_passant)
 
-                        # Перемещение фигуры
+                        # Двигаем фигуру
                         self.selected_piece.move_to(cell)
 
-                        # Удаляем взятые фигуры после перемещения (кроме случая превращения)
+                        # Убираем побитую фигуру
                         if is_capture and captured_piece and captured_piece in self.pieces:
                             self.pieces.remove(captured_piece)
 
-                        # Обновление счетчика 50 ходов
+                        # Обновляем счётчик 50 ходов
                         if is_capture or is_pawn_move:
-                            self.halfmove_clock = 0  # Сброс при взятии или ходе пешкой
+                            self.halfmove_clock = 0
                         else:
-                            self.halfmove_clock += 1  # Увеличение счетчика
+                            self.halfmove_clock += 1
 
-                        # Обновление флага двойного хода пешки
+                        # Флаг двойного хода пешки
                         if isinstance(self.selected_piece, Pawn) and abs(cell[1] - prev_pos[1]) == 2:
                             self.last_double_step_pawn = self.selected_piece
                         else:
@@ -405,6 +411,7 @@ class Board:
                         self.selected_piece = None
                         self.show_selection = False
                     else:
+                        # Кликнули не по легальному ходу
                         self.selected_piece = None
                         self.show_selection = False
                 else:
@@ -415,13 +422,29 @@ class Board:
                             self.show_selection = True
                             break
 
-        # Проверка ничейных ситуаций после каждого хода
+        # --- Проверки после хода ---
         if not self.is_game_over:
-            self.is_draw_by_material(self.pieces)
-            self.check_fifty_move_rule()
+            # Ничья по материалу
+            if self.is_draw_by_material(self.pieces):
+                return True
+            # Правило 50 ходов
+            if self.check_fifty_move_rule():
+                return True
+            # Мат
+            if self.is_checkmate(self.current_turn):
+                return True
+            # Пат (нет ходов, но и шаха нет)
+            if not self.is_in_check(self.current_turn):
+                no_moves = True
+                for piece in self.pieces:
+                    if piece.color == self.current_turn and self.get_legal_moves(piece):
+                        no_moves = False
+                        break
+                if no_moves:
+                    self.set_draw("Пат — ничья.")
+                    return True
 
         return True
-
 
     def switch_turn(self):
         self.current_turn = Color.BLACK if self.current_turn == Color.WHITE else Color.WHITE
@@ -578,11 +601,11 @@ class Board:
                     # Есть слоны на разных цветах — мат возможен
                     return False
             # Все слоны одного цвета — ничья
-            self.set_draw("Ничья: только короли и однопольные слоны — мат невозможен.")
+            self.set_draw(
+                "Ничья: только короли и однопольные слоны — мат невозможен.")
             return True
 
         return False
-
 
     def set_draw(self, reason):
         """Устанавливает ничью с указанной причиной"""
@@ -690,7 +713,7 @@ class Board:
             self.set_draw("Ничья по правилу 50 ходов")
             return True
         return False
-    
+
     def resign(self):
         """Игрок сдаётся, партия завершается поражением"""
         if self.current_turn == Color.WHITE:
@@ -705,7 +728,8 @@ class Board:
 
     def is_in_check(self, color):
         """Проверяет, находится ли король данного цвета под шахом"""
-        king = next((p for p in self.pieces if isinstance(p, King) and p.color == color), None)
+        king = next((p for p in self.pieces if isinstance(
+            p, King) and p.color == color), None)
         if not king:
             return False
 
@@ -725,7 +749,8 @@ class Board:
                 move = (x, y)
                 if piece.is_valid_move(move, self.pieces):
                     original_pos = piece.position
-                    captured_piece = next((p for p in self.pieces if p.position == move and p.color != piece.color), None)
+                    captured_piece = next(
+                        (p for p in self.pieces if p.position == move and p.color != piece.color), None)
 
                     # временно выполняем ход
                     piece.position = move
@@ -743,7 +768,31 @@ class Board:
 
         return legal_moves
 
+    def is_checkmate(self, color) -> bool:
+        """Проверяет, является ли ситуация матом для указанного цвета"""
+        if not self.is_in_check(color):
+            return False  # Мат только если есть шах
 
+        # Перебираем все фигуры данного цвета
+        for piece in self.pieces:
+            if piece.color == color:
+                legal_moves = self.get_legal_moves(piece)
+                if legal_moves:  # Если хотя бы один ход возможен
+                    return False
+
+        # Нет ходов и король под шахом => мат
+        winner = "белые" if color == Color.BLACK else "чёрные"
+        self.set_checkmate(winner)
+        return True
+
+    def set_checkmate(self, winner):
+        """Устанавливает мат и завершает игру"""
+        self.game_result = "1-0" if winner == "белые" else "0-1"
+        self.game_result_reason = f"Мат! Победили {winner}."
+        self.is_game_over = True
+        # Перерисовываем экран сразу
+        self.draw()
+        pygame.display.flip()
 
     def run(self):
         clock = pygame.time.Clock()
